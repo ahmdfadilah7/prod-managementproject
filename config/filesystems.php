@@ -40,9 +40,11 @@ return [
 
         'hris_storage' => [
             'driver' => 'local',
-            'root' => (string) config('managementpro.hris_storage.root', ''),
-            'url' => rtrim((string) config('managementpro.hris_storage.url', ''), '/')
-                .config('managementpro.hris_storage.url_prefix', '/storage'),
+            // Pakai env() langsung: filesystems.php diload sebelum managementpro.php,
+            // sehingga config('managementpro.hris_storage.root') sering kosong → error "directory at ."
+            'root' => (string) env('HRIS_STORAGE_ROOT', ''),
+            'url' => rtrim((string) env('HRIS_STORAGE_URL', ''), '/')
+                .'/'.trim((string) env('HRIS_STORAGE_URL_PREFIX', 'storage'), '/'),
             'visibility' => 'public',
             'throw' => false,
             'report' => false,

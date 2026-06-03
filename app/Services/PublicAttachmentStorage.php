@@ -89,6 +89,12 @@ class PublicAttachmentStorage
             || str_ends_with($base, '/helpdesk-ticket-messages');
     }
 
+    /** Root disk hris_storage yang dipakai Flysystem (harus terisi, bukan "."). */
+    public static function hrisStorageDiskRoot(): string
+    {
+        return trim((string) config('filesystems.disks.hris_storage.root', ''));
+    }
+
     /** Apakah path HRIS storage siap untuk menulis (root valid, writable, bukan folder ManagementPro). */
     public static function canWriteToHrisStorageRoot(): bool
     {
@@ -96,8 +102,8 @@ class PublicAttachmentStorage
             return false;
         }
 
-        $root = trim((string) config('managementpro.hris_storage.root', ''));
-        if ($root === '' || ! is_dir($root) || ! is_writable($root)) {
+        $root = self::hrisStorageDiskRoot();
+        if ($root === '' || $root === '.' || ! is_dir($root) || ! is_writable($root)) {
             return false;
         }
 
