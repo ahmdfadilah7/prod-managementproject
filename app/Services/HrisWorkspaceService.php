@@ -718,17 +718,27 @@ class HrisWorkspaceService
 
   public function addMessage(HdTicket $ticket, User $user, ?string $body, ?\Illuminate\Http\UploadedFile $attachment = null): HdTicketMessage
   {
-    $attachmentPath = null;
-    if ($attachment) {
-      $attachmentPath = app(TicketMessageAttachmentService::class)->store($ticket, $attachment);
-    }
-
-    return HdTicketMessage::create([
+    $message = HdTicketMessage::create([
       'hd_tickets_id' => $ticket->id,
       'users_id' => $user->id,
       'message' => $body ?? '',
-      'attachment' => $attachmentPath,
+      'attachment' => null,
     ]);
+
+    if ($attachment) {
+      try {
+        $path = app(TicketMessageAttachmentService::class)->store($ticket, $attachment);
+        $message->update(['attachment' => $path]);
+      } catch (\Throwable $e) {
+        report($e);
+        $detail = $e instanceof \Symfony\Component\HttpKernel\Exception\HttpException
+          ? $e->getMessage()
+          : 'Periksa HRIS_STORAGE_ROOT atau permission folder storage.';
+        abort(422, "Pesan tersimpan, tetapi lampiran gagal diunggah: {$detail}");
+      }
+    }
+
+    return $message->fresh();
   }
 
   public function ticketToTaskArray(HdTicket $ticket, int $position = 0): array
@@ -1713,7 +1723,7 @@ class HrisWorkspaceService
   }
 
   public function hdProjectTaskAttachmentToNoteArray(
-    HdProjectTaskAttachment $attachment,
+    \App\Models\HdProjectTaskAttachment $attachment,
     int $projectId,
     User $viewer
   ): array {
@@ -1743,7 +1753,7 @@ class HrisWorkspaceService
           ->values()
           ->all()
         : []);
-// test
+
     return [
       'id' => $task->id,
       'hd_projects_id' => $task->hd_projects_id,

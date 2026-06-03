@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
@@ -50,10 +51,22 @@ class PublicAttachmentStorage
             );
         }
 
+        $pathBase = trim((string) config('managementpro.hris_storage.path', 'helpdesk-ticket-messages'), '/');
+
+        if (self::canWriteToHrisStorageRoot()) {
+            return new self(
+                self::DISK_HRIS,
+                self::HELPDESK_PRUNABLE_PREFIXES,
+                $pathBase
+            );
+        }
+
+        Log::warning('Helpdesk lampiran disimpan di storage ManagementPro; set HRIS_STORAGE_ROOT ke storage/app/public aplikasi HRIS agar file tersimpan di server HRIS.');
+
         return new self(
-            self::DISK_HRIS,
+            self::DISK_PUBLIC,
             self::HELPDESK_PRUNABLE_PREFIXES,
-            trim((string) config('managementpro.hris_storage.path', 'helpdesk-ticket-messages'), '/'),
+            $pathBase !== '' ? $pathBase : 'helpdesk-ticket-messages'
         );
     }
 
@@ -66,7 +79,35 @@ class PublicAttachmentStorage
 
     public function usesFilamentHelpdeskLayout(): bool
     {
-        return $this->diskName === self::DISK_HRIS && config('managementpro.hris_mode');
+        if (! config('managementpro.hris_mode')) {
+            return false;
+        }
+
+        $base = trim((string) ($this->storePathBase ?? ''), '/');
+
+        return $base === 'helpdesk-ticket-messages'
+            || str_ends_with($base, '/helpdesk-ticket-messages');
+    }
+
+    /** Apakah path HRIS storage siap untuk menulis (root valid, writable, bukan folder ManagementPro). */
+    public static function canWriteToHrisStorageRoot(): bool
+    {
+        if (! config('managementpro.hris_mode')) {
+            return false;
+        }
+
+        $root = trim((string) config('managementpro.hris_storage.root', ''));
+        if ($root === '' || ! is_dir($root) || ! is_writable($root)) {
+            return false;
+        }
+
+        $hrisReal = realpath($root);
+        $localReal = realpath(storage_path('app/public'));
+        if ($hrisReal && $localReal && $hrisReal === $localReal) {
+            return false;
+        }
+
+        return true;
     }
 
     public static function hrisHelpdeskStorageEnabled(): bool
@@ -141,8 +182,6 @@ class PublicAttachmentStorage
             if ($this->diskName !== self::DISK_PUBLIC) {
                 abort(500, 'Lampiran task project hanya disimpan di storage ManagementPro, bukan storage HRIS.');
             }
-        } elseif ($this->diskName === self::DISK_HRIS) {
-            self::assertHrisStorageRootConfigured();
         }
 
         $ext = strtolower($file->getClientOriginalExtension() ?: $file->extension() ?: 'bin');
@@ -150,14 +189,18 @@ class PublicAttachmentStorage
         if ($this->usesFilamentHelpdeskLayout()) {
             // Sama seperti Filament: helpdesk-ticket-messages/01KT6XDAE2SERD2R2R7M1ME5CR.jpg
             $filename = (string) Str::ulid().'.'.$ext;
-
-            return $file->storeAs($directory, $filename, $this->diskName);
+            $stored = $file->storeAs($directory, $filename, $this->diskName);
+        } else {
+            $base = Str::slug(pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME)) ?: 'file';
+            $filename = Str::uuid().'_'.Str::limit($base, 80, '').'.'.$ext;
+            $stored = $file->storeAs($directory, $filename, $this->diskName);
         }
 
-        $base = Str::slug(pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME)) ?: 'file';
-        $filename = Str::uuid().'_'.Str::limit($base, 80, '').'.'.$ext;
+        if ($stored === false) {
+            abort(422, 'Gagal menyimpan lampiran. Periksa permission folder storage atau nilai HRIS_STORAGE_ROOT di .env.');
+        }
 
-        return $file->storeAs($directory, $filename, $this->diskName);
+        return $stored;
     }
 
     public function exists(?string $path): bool
