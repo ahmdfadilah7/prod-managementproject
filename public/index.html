@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <title>ManagementPro - Project Management</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <script>
+      (function () {
+        var key = 'managementpro-theme'
+        var legacy = localStorage.getItem('theme')
+        if (legacy && !localStorage.getItem(key)) {
+          localStorage.setItem(key, legacy)
+        }
+        var stored = localStorage.getItem(key)
+        var dark =
+          stored === 'dark' ||
+          (stored !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches)
+        document.documentElement.classList.toggle('dark', dark)
+        document.documentElement.style.colorScheme = dark ? 'dark' : 'light'
+      })()
+    </script>
+    <script type="module" crossorigin src="/assets/index-C4eLkbLP.js"></script>
+    <link rel="stylesheet" crossorigin href="/assets/index-B_RB5ft8.css">
+  </head>
+  <body>
+    <div id="app"></div>
+  </body>
+</html>

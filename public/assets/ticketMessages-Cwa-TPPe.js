@@ -1,0 +1,1 @@
+function e(e){return{name:`ticket-messages`,query:{ticket:e.id,project:e.project_id}}}function t(e){return{name:`ticket-messages`,query:{project:e}}}export{e as n,t};
