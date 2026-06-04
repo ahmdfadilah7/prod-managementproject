@@ -1826,6 +1826,11 @@ class HrisWorkspaceService
     ];
   }
 
+  public function normalizeHdProjectLifecycleStatus(string $status): string
+  {
+    return $this->normalizeHdProjectStatus($status);
+  }
+
   protected function normalizeHdProjectStatus(string $status): string
   {
     $allowed = ['planning', 'active', 'on_hold', 'completed', 'archived'];

@@ -229,7 +229,7 @@ class CalendarController extends Controller
 
             $categoryId = (int) $project->subCategory?->hd_categories_id;
             $categoryName = $project->subCategory?->category?->name;
-            $status = $this->normalizeHdProjectBoardStatus($project->status);
+            $status = $this->hris->normalizeHdProjectLifecycleStatus($project->status);
             $meta = $this->projectRangeMeta($start, $end, $today, $status);
 
             $ranges->push([
@@ -336,16 +336,6 @@ class CalendarController extends Controller
             'is_running' => $isRunning,
             'is_overdue' => $isRunning && $endStr < $today,
         ];
-    }
-
-    protected function normalizeHdProjectBoardStatus(string $status): string
-    {
-        $allowed = ['backlog', 'todo', 'in_progress', 'review', 'done'];
-        if (in_array($status, $allowed, true)) {
-            return $status;
-        }
-
-        return $status === 'pending' ? 'backlog' : 'todo';
     }
 
     protected function jsonCalendar(
