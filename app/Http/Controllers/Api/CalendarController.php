@@ -61,23 +61,30 @@ class CalendarController extends Controller
             $today
         );
 
-        $projectTaskEvents = $this->buildHrisProjectTaskCalendarEvents(
+        [$hrisProjectTaskRanges, $hrisProjectTaskDayMarkers] = $this->buildHrisProjectTaskCalendarEvents(
             $categoryIds,
             $from,
             $to,
             $today
         );
 
-        $byDateEvents = $projectTaskEvents->concat($hdProjectDayMarkers);
+        $byDateEvents = $hdProjectDayMarkers->concat($hrisProjectTaskDayMarkers);
 
-        return $this->jsonCalendar($year, collect(), $byDateEvents, $hdProjectRanges, $projectTaskEvents);
+        return $this->jsonCalendar(
+            $year,
+            collect(),
+            $byDateEvents,
+            $hdProjectRanges,
+            $hrisProjectTaskRanges,
+            $hrisProjectTaskRanges
+        );
     }
 
     /**
      * @param  \Illuminate\Support\Collection<int, int>  $categoryIds
-     * @return \Illuminate\Support\Collection<int, array<string, mixed>>
+     * @return array{0: \Illuminate\Support\Collection, 1: \Illuminate\Support\Collection}
      */
-    protected function buildHrisProjectTaskCalendarEvents($categoryIds, Carbon $from, Carbon $to, string $today)
+    protected function buildHrisProjectTaskCalendarEvents($categoryIds, Carbon $from, Carbon $to, string $today): array
     {
         $tasks = HdProjectTask::query()
             ->overlappingPeriod($from, $to)
@@ -89,50 +96,132 @@ class CalendarController extends Controller
             ->orderBy('start_date')
             ->get();
 
-        return $tasks->map(function (HdProjectTask $task) use ($today) {
-            $project = $task->hdProject;
-            $category = $project?->subCategory?->category;
-            $categoryId = (int) ($category?->id ?? 0);
-            $date = AppDateTime::toDateString($task->start_date);
-            $status = $task->status;
-            $isRunning = ! in_array($status, ['done'], true);
-            $endKey = $task->end_date
-                ? AppDateTime::toDateString($task->end_date)
-                : $date;
-            $timing = $endKey < $today ? 'past' : ($date <= $today && $today <= $endKey ? 'today' : ($date > $today ? 'upcoming' : 'past'));
-            $projectEnd = $project?->end_date;
-            $taskEndForDeadline = $task->end_date ?? $task->start_date;
-            $pastProjectDeadline = $projectEnd && $taskEndForDeadline
-                && Carbon::parse($taskEndForDeadline)->timezone(AppDateTime::displayTimezone())->startOfDay()
-                    ->gt(Carbon::parse($projectEnd)->timezone(AppDateTime::displayTimezone())->endOfDay());
+        $ranges = collect();
+        $dayMarkers = collect();
 
-            return [
-                'type' => 'hris_project_task',
-                'id' => $task->id,
-                'hris_project_id' => $task->hd_projects_id,
-                'project_id' => $categoryId,
-                'title' => $task->subject,
-                'task_number' => $task->task_number,
-                'description' => $task->description,
-                'date' => $date,
-                'start_date' => AppDateTime::toIso($task->start_date),
-                'end_date' => AppDateTime::toIso($task->end_date),
-                'range_start' => AppDateTime::toIso($task->start_date),
-                'range_end' => AppDateTime::toIso($task->end_date ?? $task->start_date),
-                'hris_project_end_date' => AppDateTime::toIso($projectEnd),
-                'status' => $status,
-                'priority' => $task->priority,
-                'category' => $category?->name,
-                'project_title' => $project?->subject,
-                'project_number' => $project?->project_number,
-                'assignee_name' => $task->assignee?->name,
-                'created_at' => AppDateTime::toIso($task->created_at),
-                'updated_at' => AppDateTime::toIso($task->updated_at),
-                'timing' => $timing,
-                'is_running' => $isRunning,
-                'is_overdue' => $isRunning && ($pastProjectDeadline || $timing === 'past'),
-            ];
-        })->values();
+        foreach ($tasks as $task) {
+            $bounds = $this->resolveHrisProjectTaskDateBounds($task);
+            if (! $bounds) {
+                continue;
+            }
+
+            [$start, $end] = $bounds;
+            $payload = $this->hrisProjectTaskCalendarPayload($task, $start, $end, $today);
+            $ranges->push($payload);
+
+            if ($end->lt($from) || $start->gt($to)) {
+                continue;
+            }
+
+            $clipStart = $start->copy()->timezone(AppDateTime::displayTimezone())->startOfDay();
+            $clipEnd = $end->copy()->timezone(AppDateTime::displayTimezone())->startOfDay();
+            if ($clipStart->lt($from->copy()->timezone(AppDateTime::displayTimezone())->startOfDay())) {
+                $clipStart = $from->copy()->timezone(AppDateTime::displayTimezone())->startOfDay();
+            }
+            if ($clipEnd->gt($to->copy()->timezone(AppDateTime::displayTimezone())->startOfDay())) {
+                $clipEnd = $to->copy()->timezone(AppDateTime::displayTimezone())->startOfDay();
+            }
+
+            $current = $clipStart->copy();
+            $guard = 0;
+
+            while ($current->lte($clipEnd) && $guard < 400) {
+                $date = $current->toDateString();
+                $dayTiming = $date < $today ? 'past' : ($date === $today ? 'today' : 'upcoming');
+
+                $dayMarkers->push([
+                    ...$payload,
+                    'type' => 'hris_project_task_day',
+                    'date' => $date,
+                    'timing' => $dayTiming,
+                ]);
+
+                $current->addDay();
+                $guard++;
+            }
+        }
+
+        return [$ranges->values(), $dayMarkers->values()];
+    }
+
+    /**
+     * @return array{0: Carbon, 1: Carbon}|null
+     */
+    protected function resolveHrisProjectTaskDateBounds(HdProjectTask $task): ?array
+    {
+        if (! $task->start_date && ! $task->end_date) {
+            return null;
+        }
+
+        $displayTz = AppDateTime::displayTimezone();
+        $start = Carbon::parse($task->start_date ?? $task->end_date)->timezone($displayTz)->startOfDay();
+        $end = Carbon::parse($task->end_date ?? $task->start_date)->timezone($displayTz)->endOfDay();
+
+        if ($end->lt($start)) {
+            [$start, $end] = [$end->copy()->startOfDay(), $start->copy()->endOfDay()];
+        }
+
+        return [$start, $end];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function hrisProjectTaskCalendarPayload(
+        HdProjectTask $task,
+        Carbon $start,
+        Carbon $end,
+        string $today
+    ): array {
+        $project = $task->hdProject;
+        $category = $project?->subCategory?->category;
+        $categoryId = (int) ($category?->id ?? 0);
+        $startKey = $start->toDateString();
+        $endKey = $end->toDateString();
+        $status = $task->status;
+        $isRunning = ! in_array($status, ['done'], true);
+        $projectEnd = $project?->end_date;
+        $taskEndForDeadline = $task->end_date ?? $task->start_date;
+        $pastProjectDeadline = $projectEnd && $taskEndForDeadline
+            && Carbon::parse($taskEndForDeadline)->timezone(AppDateTime::displayTimezone())->startOfDay()
+                ->gt(Carbon::parse($projectEnd)->timezone(AppDateTime::displayTimezone())->endOfDay());
+
+        if ($endKey < $today) {
+            $timing = 'past';
+        } elseif ($startKey > $today) {
+            $timing = 'upcoming';
+        } elseif ($startKey <= $today && $today <= $endKey) {
+            $timing = 'today';
+        } else {
+            $timing = 'past';
+        }
+
+        return [
+            'type' => 'hris_project_task',
+            'id' => $task->id,
+            'hris_project_id' => $task->hd_projects_id,
+            'project_id' => $categoryId,
+            'title' => $task->subject,
+            'task_number' => $task->task_number,
+            'description' => $task->description,
+            'date' => $startKey,
+            'start_date' => AppDateTime::toIso($task->start_date),
+            'end_date' => AppDateTime::toIso($task->end_date),
+            'range_start' => AppDateTime::toIso($start),
+            'range_end' => AppDateTime::toIso($end),
+            'hris_project_end_date' => AppDateTime::toIso($projectEnd),
+            'status' => $status,
+            'priority' => $task->priority,
+            'category' => $category?->name,
+            'project_title' => $project?->subject,
+            'project_number' => $project?->project_number,
+            'assignee_name' => $task->assignee?->name,
+            'created_at' => AppDateTime::toIso($task->created_at),
+            'updated_at' => AppDateTime::toIso($task->updated_at),
+            'timing' => $timing,
+            'is_running' => $isRunning,
+            'is_overdue' => $isRunning && ($pastProjectDeadline || $timing === 'past'),
+        ];
     }
 
     protected function indexStandard($user, int $year, Carbon $from, Carbon $to): JsonResponse
@@ -343,11 +432,13 @@ class CalendarController extends Controller
         $ticketEvents,
         $byDateEvents = null,
         $hdProjectRanges = null,
-        $projectTaskEvents = null
+        $projectTaskEvents = null,
+        $hrisProjectTaskRanges = null
     ): JsonResponse {
         $tickets = $ticketEvents->values();
         $tasks = ($projectTaskEvents ?? collect())->values();
         $ranges = $hdProjectRanges ? $hdProjectRanges->values() : collect();
+        $taskRanges = ($hrisProjectTaskRanges ?? $tasks)->values();
         $byDateSource = ($byDateEvents ?? $ticketEvents)->values();
         $panelItems = $tickets->concat($tasks)->concat($ranges);
 
@@ -356,6 +447,7 @@ class CalendarController extends Controller
             'today' => Carbon::now(AppDateTime::displayTimezone())->toDateString(),
             'data' => $panelItems,
             'hd_project_ranges' => $ranges,
+            'hris_project_task_ranges' => $taskRanges,
             'by_date' => $byDateSource->groupBy('date')->map->values(),
             'summary' => [
                 'total' => $panelItems->count(),
