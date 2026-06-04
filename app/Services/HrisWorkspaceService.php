@@ -445,7 +445,7 @@ class HrisWorkspaceService
     }
 
     $subCategory = HdSubCategory::where('hd_categories_id', $category->id)->findOrFail($subCategoryId);
-    $boardStatus = $data['status'] ?? 'todo';
+    $boardStatus = $data['status'] ?? 'backlog';
     $ticketStatus = TicketStatusMapper::toTicket($boardStatus);
     $priority = TicketStatusMapper::boardToTicketPriority($data['priority'] ?? 'medium');
 
@@ -615,7 +615,7 @@ class HrisWorkspaceService
 
   /**
    * Isi assigned_to dengan user yang menggeser tiket jika masih kosong
-   * dan status berubah dari pending (backlog) ke status lain.
+   * dan status berubah dari pending ke status lain.
    *
    * @return array<string, mixed>
    */

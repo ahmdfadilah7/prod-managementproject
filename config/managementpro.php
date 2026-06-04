@@ -95,18 +95,19 @@ return [
 
   /*
   | Status kanban (frontend) ↔ status ticket HRIS
+  | Kolom backlog = open, todo = pending (selaras label HRIS di kanban kategori)
   */
   'ticket_status_to_board' => [
-    'pending' => 'backlog',
-    'open' => 'todo',
+    'open' => 'backlog',
+    'pending' => 'todo',
     'processing' => 'in_progress',
     'resolved' => 'review',
     'closed' => 'done',
   ],
 
   'board_status_to_ticket' => [
-    'backlog' => 'pending',
-    'todo' => 'open',
+    'backlog' => 'open',
+    'todo' => 'pending',
     'in_progress' => 'processing',
     'review' => 'resolved',
     'done' => 'closed',
