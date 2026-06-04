@@ -1,0 +1,1 @@
+import{n as e,v as t}from"./index-B888zSis.js";function n(){let n=e(),r=t(()=>n.permissions);function i(e){return n.can(e)}function a(e){return e.every(e=>n.can(e))}function o(e){let t=n.user?.roles??[];return Array.isArray(e)?t.some(t=>e.includes(t.slug)):t.some(t=>t.slug===e)}return{permissions:r,can:i,canAll:a,hasRole:o}}export{n as t};

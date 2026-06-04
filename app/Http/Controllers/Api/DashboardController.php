@@ -136,15 +136,44 @@ class DashboardController extends Controller
 
     $myTicketCount = HdTicket::query()
       ->inActiveCategory()
+      ->whereIn('hd_categories_id', $categoryIds)
       ->where('assigned_to', $user->id)
       ->whereNotIn('status', ['closed'])
       ->count();
 
     $myProjectTaskCount = $this->myHdProjectTasksQuery($user, $categoryIds)->count();
 
+    $myCompletedTickets = HdTicket::query()
+      ->inActiveCategory()
+      ->whereIn('hd_categories_id', $categoryIds)
+      ->where('assigned_to', $user->id)
+      ->where('status', 'closed')
+      ->count();
+
+    $myCompletedProjectTasks = HdProjectTask::query()
+      ->where('assigned_to', $user->id)
+      ->where('status', 'done')
+      ->whereHas('hdProject', function ($q) use ($categoryIds) {
+        $q->inActiveSubCategory()
+          ->whereHas('subCategory', fn ($sq) => $sq->whereIn('hd_categories_id', $categoryIds));
+      })
+      ->count();
+
+    $myAssignedTotal = $myTicketCount + $myProjectTaskCount + $myCompletedTickets + $myCompletedProjectTasks;
+
     $stats['my_ticket_count'] = $myTicketCount;
     $stats['my_project_task_count'] = $myProjectTaskCount;
     $stats['my_tasks'] = $myTicketCount + $myProjectTaskCount;
+    $stats['my_completed_tickets'] = $myCompletedTickets;
+    $stats['my_completed_project_tasks'] = $myCompletedProjectTasks;
+    $stats['my_completed_tasks'] = $myCompletedTickets + $myCompletedProjectTasks;
+    $stats['my_assigned_total'] = $myAssignedTotal;
+    $stats['workspace_completion_rate'] = $stats['total_tasks'] > 0
+      ? (int) round(($stats['completed_tasks'] / $stats['total_tasks']) * 100)
+      : 0;
+    $stats['my_completion_rate'] = $myAssignedTotal > 0
+      ? (int) round((($myCompletedTickets + $myCompletedProjectTasks) / $myAssignedTotal) * 100)
+      : 100;
 
     $tasksByStatus = [
       'open' => 0,
