@@ -63,6 +63,10 @@ class HrisWorkspaceService
 
   protected function createOneCategory(User $user, array $data): HdCategory
   {
+    if (! $user->is_active) {
+      abort(403, 'Akun Anda tidak aktif.');
+    }
+
     $companyId = $user->companyId() ?? config('managementpro.default_company_id');
 
     $category = HdCategory::create([
@@ -297,6 +301,10 @@ class HrisWorkspaceService
   public function authorizeCategoryManage(User $user, HdCategory $category, string $action = 'update'): void
   {
     $this->authorizeCategory($user, $category);
+
+    if (User::hrisWorkspaceUnrestricted()) {
+      return;
+    }
 
     $permission = $action === 'delete' ? 'projects.delete' : 'projects.update';
 
@@ -1087,6 +1095,10 @@ class HrisWorkspaceService
 
   public function createHdProject(HdCategory $category, User $user, array $data): HdProject
   {
+    if (! $user->is_active) {
+      abort(403, 'Akun Anda tidak aktif.');
+    }
+
     $this->authorizeCategory($user, $category);
 
     $subCategory = HdSubCategory::where('hd_categories_id', $category->id)
@@ -1336,6 +1348,19 @@ class HrisWorkspaceService
 
   public function assertCanManageHdProject(HdProject $project, User $user): void
   {
+    if (User::hrisWorkspaceUnrestricted()) {
+      if (! $user->is_active) {
+        abort(403, 'Akun Anda tidak aktif.');
+      }
+
+      $project->loadMissing('subCategory.category');
+      if ($project->subCategory?->category) {
+        $this->authorizeCategory($user, $project->subCategory->category);
+      }
+
+      return;
+    }
+
     if (! $this->userIsHdProjectCreator($project, $user)) {
       abort(403, 'Hanya pembuat project yang dapat mengubah atau menghapus project ini.');
     }
@@ -1352,6 +1377,14 @@ class HrisWorkspaceService
 
   public function assertCanEditHdProjectTasks(HdProject $project, User $user): void
   {
+    if (User::hrisWorkspaceUnrestricted()) {
+      if (! $user->is_active) {
+        abort(403, 'Akun Anda tidak aktif.');
+      }
+
+      return;
+    }
+
     if (! $this->userCanEditHdProjectTasks($project, $user)) {
       abort(403, 'Hanya anggota project yang dapat mengubah task.');
     }

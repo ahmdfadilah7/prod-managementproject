@@ -56,7 +56,7 @@ class HdCategory extends Model
 
     $query->forCompany($companyId);
 
-    if ($user->hasPermission('projects.view')) {
+    if (User::hrisWorkspaceUnrestricted() || $user->hasPermission('projects.view')) {
       return $query;
     }
 

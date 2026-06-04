@@ -11,6 +11,13 @@ trait HasHrisAuth
     return (bool) config('managementpro.hris_mode');
   }
 
+  /** Semua user aktif HRIS boleh akses penuh kategori/project (permission map dimatikan). */
+  public static function hrisWorkspaceUnrestricted(): bool
+  {
+    return static::usesHrisSchema()
+      && ! config('managementpro.permission_map_enabled', true);
+  }
+
   public function companyId(): ?int
   {
     if (! static::usesHrisSchema()) {
