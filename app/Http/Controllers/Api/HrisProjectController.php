@@ -105,16 +105,20 @@ class HrisProjectController extends Controller
         $validated = $request->validate([
             'subject' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string'],
-            'hd_sub_categories_id' => ['required', 'integer'],
+            'hd_sub_categories_id' => ['required', 'integer', 'exists:hd_sub_categories,id'],
             'priority' => ['sometimes', 'in:low,medium,high,critical,urgent'],
             'status' => ['sometimes', 'in:planning,active,on_hold,completed,archived'],
             'start_date' => ['nullable', 'date'],
             'end_date' => ['nullable', 'date', 'after_or_equal:start_date'],
-            'assignee_ids' => ['required', 'array', 'min:1'],
+            'assignee_ids' => ['nullable', 'array'],
             'assignee_ids.*' => ['integer', 'exists:users,id'],
         ]);
 
         $user = $request->user();
+        if (empty($validated['assignee_ids'])) {
+            $validated['assignee_ids'] = [$user->id];
+        }
+
         $created = $this->hris->createHdProjectForUser($user, $validated);
 
         return response()->json([
@@ -198,7 +202,9 @@ class HrisProjectController extends Controller
             ->accessibleBy($user)
             ->with(['subCategories' => fn ($q) => $q->orderBy('name')])
             ->orderBy('name')
-            ->get();
+            ->get()
+            ->filter(fn ($c) => $c->subCategories->isNotEmpty())
+            ->values();
 
         return response()->json([
             'data' => $categories->map(fn ($c) => [

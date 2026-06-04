@@ -13,7 +13,8 @@ class UserController extends Controller
     public function index(Request $request): JsonResponse
     {
         $search = $request->string('search')->trim()->toString();
-        $limit = min(50, max(5, $request->integer('limit', 20)));
+        $defaultLimit = config('managementpro.hris_mode') ? 100 : 20;
+        $limit = min(200, max(5, $request->integer('limit', $defaultLimit)));
 
         $query = User::query()->with(User::authEagerLoads());
 

@@ -1412,7 +1412,17 @@ class HrisWorkspaceService
 
   public function createHdProjectForUser(User $user, array $data): HdProject
   {
-    $subCategory = HdSubCategory::with('category')->findOrFail($data['hd_sub_categories_id']);
+    if (! $user->is_active) {
+      abort(403, 'Akun Anda tidak aktif.');
+    }
+
+    $subCategoryId = (int) ($data['hd_sub_categories_id'] ?? 0);
+    $subCategory = HdSubCategory::with('category')->find($subCategoryId);
+
+    if (! $subCategory?->category) {
+      abort(422, 'Sub kategori tidak valid atau kategori induk tidak tersedia. Buat kategori & sub kategori di menu Kategori terlebih dahulu.');
+    }
+
     $this->authorizeCategory($user, $subCategory->category);
 
     return $this->createHdProject($subCategory->category, $user, $data);
