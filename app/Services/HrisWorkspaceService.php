@@ -1853,21 +1853,60 @@ class HrisWorkspaceService
 
   protected function generateProjectNumber(int $companyId): string
   {
-    $prefix = 'PRJ-'.now()->format('Ymd');
-    $last = HdProject::where('companies_id', $companyId)
-      ->where('project_number', 'like', $prefix.'%')
-      ->count() + 1;
-
-    return sprintf('%s-%03d', $prefix, $last);
+    return $this->generateUniqueCompanyScopedNumber(
+      HdProject::class,
+      $companyId,
+      'PRJ-'.now()->format('Ymd'),
+      'project_number',
+    );
   }
 
   protected function generateHdProjectTaskNumber(int $companyId): string
   {
-    $prefix = 'PTSK-'.now()->format('Ymd');
-    $last = HdProjectTask::where('companies_id', $companyId)
-      ->where('task_number', 'like', $prefix.'%')
-      ->count() + 1;
+    return $this->generateUniqueCompanyScopedNumber(
+      HdProjectTask::class,
+      $companyId,
+      'PTSK-'.now()->format('Ymd'),
+      'task_number',
+    );
+  }
 
-    return sprintf('%s-%03d', $prefix, $last);
+  /**
+   * Nomor unik per company — termasuk baris soft delete (constraint DB tetap berlaku).
+   */
+  protected function generateUniqueCompanyScopedNumber(
+    string $modelClass,
+    int $companyId,
+    string $prefix,
+    string $column,
+  ): string {
+    $maxSeq = $modelClass::withTrashed()
+      ->where('companies_id', $companyId)
+      ->where($column, 'like', $prefix.'%')
+      ->pluck($column)
+      ->map(fn (string $number) => $this->extractNumberSequenceSuffix($number))
+      ->max() ?? 0;
+
+    for ($seq = $maxSeq + 1; $seq < 10000; $seq++) {
+      $candidate = sprintf('%s-%03d', $prefix, $seq);
+
+      if (! $modelClass::withTrashed()
+        ->where('companies_id', $companyId)
+        ->where($column, $candidate)
+        ->exists()) {
+        return $candidate;
+      }
+    }
+
+    throw new \RuntimeException("Tidak dapat membuat nomor unik untuk {$column}.");
+  }
+
+  protected function extractNumberSequenceSuffix(string $number): int
+  {
+    if (preg_match('/-(\d+)$/', $number, $matches)) {
+      return (int) $matches[1];
+    }
+
+    return 0;
   }
 }
