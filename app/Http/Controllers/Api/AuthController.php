@@ -103,6 +103,7 @@ class AuthController extends Controller
             'expires_at' => $expiresAt->toIso8601String(),
             'remember' => $remember,
             'hris_mode' => config('managementpro.hris_mode'),
+            'permission_map_enabled' => (bool) config('managementpro.permission_map_enabled'),
         ]);
     }
 
@@ -150,6 +151,7 @@ class AuthController extends Controller
         return response()->json([
             'user' => new UserResource($request->user()->load(User::authEagerLoads())),
             'hris_mode' => config('managementpro.hris_mode'),
+            'permission_map_enabled' => (bool) config('managementpro.permission_map_enabled'),
         ]);
     }
 }
