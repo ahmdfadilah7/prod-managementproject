@@ -20,7 +20,31 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        $this->syncHrisStorageDisk();
         $this->ensurePublicStorageSymlink();
+    }
+
+    /**
+     * Pastikan disk hris_storage memakai root/URL dari managementpro (sumber .env).
+     */
+    protected function syncHrisStorageDisk(): void
+    {
+        if (! config('managementpro.hris_mode')) {
+            return;
+        }
+
+        $root = trim((string) config('managementpro.hris_storage.root', ''));
+        if ($root === '') {
+            return;
+        }
+
+        config(['filesystems.disks.hris_storage.root' => $root]);
+
+        $url = rtrim((string) config('managementpro.hris_storage.url'), '/');
+        if ($url !== '') {
+            $prefix = trim((string) config('managementpro.hris_storage.url_prefix', '/storage'), '/');
+            config(['filesystems.disks.hris_storage.url' => $url.'/'.$prefix]);
+        }
     }
 
     /**

@@ -36,6 +36,11 @@ return [
      */
     'root' => env('HRIS_STORAGE_ROOT'),
     'url_prefix' => '/'.trim((string) env('HRIS_STORAGE_URL_PREFIX', 'storage'), '/'),
+    /** true = jika HRIS root gagal, simpan ke storage ManagementPro (dev). Production: false. */
+    'allow_local_fallback' => filter_var(
+      env('HRIS_STORAGE_ALLOW_LOCAL_FALLBACK', env('APP_ENV') === 'local'),
+      FILTER_VALIDATE_BOOL
+    ),
   ],
 
   /*

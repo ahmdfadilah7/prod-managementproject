@@ -61,13 +61,19 @@ class PublicAttachmentStorage
             );
         }
 
-        Log::warning('Helpdesk lampiran disimpan di storage ManagementPro; set HRIS_STORAGE_ROOT ke storage/app/public aplikasi HRIS agar file tersimpan di server HRIS.');
+        $reason = self::hrisStorageWriteBlockReason() ?? 'HRIS storage tidak siap';
 
-        return new self(
-            self::DISK_PUBLIC,
-            self::HELPDESK_PRUNABLE_PREFIXES,
-            $pathBase !== '' ? $pathBase : 'helpdesk-ticket-messages'
-        );
+        if (config('managementpro.hris_storage.allow_local_fallback')) {
+            Log::warning("Helpdesk lampiran disimpan di storage ManagementPro (fallback): {$reason}");
+
+            return new self(
+                self::DISK_PUBLIC,
+                self::HELPDESK_PRUNABLE_PREFIXES,
+                $pathBase !== '' ? $pathBase : 'helpdesk-ticket-messages'
+            );
+        }
+
+        abort(422, "Lampiran tiket harus disimpan di storage HRIS (ask_hris). {$reason}");
     }
 
     public function isProjectTaskStorage(): bool
@@ -89,31 +95,59 @@ class PublicAttachmentStorage
             || str_ends_with($base, '/helpdesk-ticket-messages');
     }
 
+    /** Root absolut storage HRIS (gabungan config disk + managementpro). */
+    public static function resolveHrisStorageRoot(): string
+    {
+        $fromDisk = trim((string) config('filesystems.disks.hris_storage.root', ''));
+        if ($fromDisk !== '' && $fromDisk !== '.') {
+            return $fromDisk;
+        }
+
+        return trim((string) config('managementpro.hris_storage.root', ''));
+    }
+
     /** Root disk hris_storage yang dipakai Flysystem (harus terisi, bukan "."). */
     public static function hrisStorageDiskRoot(): string
     {
-        return trim((string) config('filesystems.disks.hris_storage.root', ''));
+        return self::resolveHrisStorageRoot();
     }
 
-    /** Apakah path HRIS storage siap untuk menulis (root valid, writable, bukan folder ManagementPro). */
-    public static function canWriteToHrisStorageRoot(): bool
+    public static function hrisStorageWriteBlockReason(): ?string
     {
         if (! config('managementpro.hris_mode')) {
-            return false;
+            return 'HRIS_MODE=false';
         }
 
-        $root = self::hrisStorageDiskRoot();
-        if ($root === '' || $root === '.' || ! is_dir($root) || ! is_writable($root)) {
-            return false;
+        $root = self::resolveHrisStorageRoot();
+        if ($root === '') {
+            return 'HRIS_STORAGE_ROOT belum diisi di .env';
+        }
+
+        if ($root === '.') {
+            return 'root disk hris_storage tidak valid — jalankan php artisan config:clear && php artisan config:cache';
+        }
+
+        if (! is_dir($root)) {
+            return "folder HRIS tidak ditemukan: {$root}";
+        }
+
+        if (! is_writable($root)) {
+            return "folder HRIS tidak bisa ditulis (permission): {$root}";
         }
 
         $hrisReal = realpath($root);
         $localReal = realpath(storage_path('app/public'));
         if ($hrisReal && $localReal && $hrisReal === $localReal) {
-            return false;
+            return 'HRIS_STORAGE_ROOT sama dengan storage ManagementPro';
         }
 
-        return true;
+        return null;
+    }
+
+    /** Apakah path HRIS storage siap untuk menulis (root valid, writable, bukan folder ManagementPro). */
+    public static function canWriteToHrisStorageRoot(): bool
+    {
+        return self::hrisStorageWriteBlockReason() === null;
     }
 
     public static function hrisHelpdeskStorageEnabled(): bool
