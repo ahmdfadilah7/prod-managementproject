@@ -16,7 +16,6 @@ use App\Models\User;
 use App\Support\AppDateTime;
 use App\Models\Task;
 use App\Services\HrisWorkspaceService;
-use App\Support\Hris\TicketStatusMapper;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -102,14 +101,30 @@ class DashboardController extends Controller
       ->inActiveCategory()
       ->whereIn('hd_categories_id', $categoryIds);
 
+    $projectTasksQuery = HdProjectTask::query()
+      ->whereHas('hdProject', function ($q) use ($categoryIds) {
+        $q->inActiveSubCategory()
+          ->whereHas('subCategory', fn ($sq) => $sq->whereIn('hd_categories_id', $categoryIds));
+      });
+
+    $ticketTotal = (clone $ticketsQuery)->count();
+    $projectTaskTotal = (clone $projectTasksQuery)->count();
+    $completedTickets = (clone $ticketsQuery)->where('status', 'closed')->count();
+    $completedProjectTasks = (clone $projectTasksQuery)->where('status', 'done')->count();
+
     $stats = [
       'total_projects' => $categoryIds->count(),
       'active_projects' => HdCategory::whereIn('id', $categoryIds)
         ->whereHas('tickets', fn ($q) => $q->whereIn('status', ['open', 'pending', 'processing']))
         ->count(),
-      'total_tasks' => (clone $ticketsQuery)->count(),
-      'completed_tasks' => (clone $ticketsQuery)->where('status', 'closed')->count(),
-      'in_progress_tasks' => (clone $ticketsQuery)->where('status', 'processing')->count(),
+      'total_tickets' => $ticketTotal,
+      'total_project_tasks' => $projectTaskTotal,
+      'total_tasks' => $ticketTotal + $projectTaskTotal,
+      'completed_tickets' => $completedTickets,
+      'completed_project_tasks' => $completedProjectTasks,
+      'completed_tasks' => $completedTickets + $completedProjectTasks,
+      'in_progress_tasks' => (clone $ticketsQuery)->where('status', 'processing')->count()
+        + (clone $projectTasksQuery)->where('status', 'in_progress')->count(),
       'overdue_tasks' => (clone $ticketsQuery)
         ->whereNotIn('status', ['closed', 'resolved'])
         ->where('sla_deadline', '<', now())
@@ -132,11 +147,11 @@ class DashboardController extends Controller
     $stats['my_tasks'] = $myTicketCount + $myProjectTaskCount;
 
     $tasksByStatus = [
-      'backlog' => 0,
-      'todo' => 0,
-      'in_progress' => 0,
-      'review' => 0,
-      'done' => 0,
+      'open' => 0,
+      'pending' => 0,
+      'processing' => 0,
+      'resolved' => 0,
+      'closed' => 0,
     ];
 
     $ticketCounts = HdTicket::query()
@@ -147,8 +162,9 @@ class DashboardController extends Controller
       ->pluck('count', 'status');
 
     foreach ($ticketCounts as $ticketStatus => $count) {
-      $board = TicketStatusMapper::toBoard($ticketStatus);
-      $tasksByStatus[$board] = ($tasksByStatus[$board] ?? 0) + $count;
+      if (array_key_exists($ticketStatus, $tasksByStatus)) {
+        $tasksByStatus[$ticketStatus] = (int) $count;
+      }
     }
 
     $recentCategories = HdCategory::query()
