@@ -70,8 +70,14 @@ return [
   ],
 
   /*
-  | Mapping permission ManagementPro → Spatie HRIS (guard web)
+  | Mapping permission ManagementPro → Spatie HRIS (guard web).
+  | false = dinonaktifkan: semua user aktif dapat semua menu & aksi API (sementara).
   */
+  'permission_map_enabled' => filter_var(
+    env('HRIS_PERMISSION_MAP_ENABLED', false),
+    FILTER_VALIDATE_BOOL
+  ),
+
   'permission_map' => [
     'dashboard.view' => 'view_any_hd::ticket',
     'projects.view' => 'view_any_hd::category',

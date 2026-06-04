@@ -83,6 +83,35 @@ class AppDateTime
     }
 
     /**
+     * Parse tanggal task/project (Y-m-d) → UTC. Start = awal hari, end = akhir hari (zona tampilan).
+     */
+    public static function parseDateInput(?string $value, bool $endOfDay = false): ?Carbon
+    {
+        if ($value === null || $value === '') {
+            return null;
+        }
+
+        $value = trim($value);
+        $displayTz = self::displayTimezone();
+
+        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $value)) {
+            $time = $endOfDay ? '23:59:59' : '00:00:00';
+
+            return Carbon::parse($value.' '.$time, $displayTz)->utc();
+        }
+
+        if (preg_match('/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/', $value)) {
+            $parsed = Carbon::parse($value, $displayTz);
+
+            return ($endOfDay ? $parsed->endOfDay() : $parsed->startOfDay())->utc();
+        }
+
+        $parsed = Carbon::parse($value)->timezone($displayTz);
+
+        return ($endOfDay ? $parsed->endOfDay() : $parsed->startOfDay())->utc();
+    }
+
+    /**
      * Parse nilai date (Y-m-d) atau datetime-local / ISO → Carbon UTC untuk DB.
      * Input tanpa offset dianggap wall clock di zona tampilan user.
      */

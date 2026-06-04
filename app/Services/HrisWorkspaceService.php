@@ -1103,8 +1103,8 @@ class HrisWorkspaceService
       'reporter_id' => $user->id,
       'priority' => $data['priority'] ?? 'medium',
       'status' => $lifecycleStatus,
-      'start_date' => AppDateTime::parseDueInput($data['start_date'] ?? null),
-      'end_date' => AppDateTime::parseDueInput($data['end_date'] ?? null),
+      'start_date' => AppDateTime::parseDateInput($data['start_date'] ?? null, false),
+      'end_date' => AppDateTime::parseDateInput($data['end_date'] ?? null, true),
       'position' => 0,
       'users_created' => $user->id,
     ]);
@@ -1204,10 +1204,10 @@ class HrisWorkspaceService
       $payload['hd_sub_categories_id'] = $sub->id;
     }
     if (array_key_exists('start_date', $data)) {
-      $payload['start_date'] = AppDateTime::parseDueInput($data['start_date']);
+      $payload['start_date'] = AppDateTime::parseDateInput($data['start_date'], false);
     }
     if (array_key_exists('end_date', $data)) {
-      $payload['end_date'] = AppDateTime::parseDueInput($data['end_date']);
+      $payload['end_date'] = AppDateTime::parseDateInput($data['end_date'], true);
     }
 
     $project->update($payload);
@@ -1462,9 +1462,10 @@ class HrisWorkspaceService
     ?Carbon $start,
     ?Carbon $end
   ): void {
-    [$projectStart, $projectEnd] = $this->hdProjectDateBounds($project);
+    $projectStartStr = AppDateTime::toDateString($project->start_date);
+    $projectEndStr = AppDateTime::toDateString($project->end_date);
 
-    if (! $projectStart && ! $projectEnd) {
+    if (! $projectStartStr && ! $projectEndStr) {
       return;
     }
 
@@ -1476,16 +1477,16 @@ class HrisWorkspaceService
         continue;
       }
 
-      $instant = $this->hdProjectTaskInstantInDisplay($date);
-      if (! $instant) {
+      $dayStr = AppDateTime::toDateString($date);
+      if (! $dayStr) {
         continue;
       }
 
-      if ($projectStart && $instant->lt($projectStart)) {
+      if ($projectStartStr && $dayStr < $projectStartStr) {
         abort(422, "Tanggal {$label} task tidak boleh sebelum tanggal mulai project.");
       }
 
-      if ($projectEnd && $instant->gt($projectEnd)) {
+      if ($projectEndStr && $dayStr > $projectEndStr) {
         abort(422, "Tanggal {$label} task tidak boleh setelah tanggal selesai project.");
       }
     }
@@ -1509,16 +1510,11 @@ class HrisWorkspaceService
       return [];
     }
 
-    $start = $hasStart
-      ? AppDateTime::parseDueInput(
-        $data['start_date'] ?? $data['work_date'] ?? $data['due_at'] ?? $data['due_date'] ?? null
-      )
-      : null;
-    $end = $hasEnd
-      ? AppDateTime::parseDueInput(
-        $data['end_date'] ?? $data['due_at'] ?? $data['work_date'] ?? $data['due_date'] ?? null
-      )
-      : null;
+    $startRaw = $data['start_date'] ?? $data['work_date'] ?? $data['due_at'] ?? $data['due_date'] ?? null;
+    $endRaw = $data['end_date'] ?? $data['due_at'] ?? $data['work_date'] ?? $data['due_date'] ?? null;
+
+    $start = $hasStart ? AppDateTime::parseDateInput($startRaw, false) : null;
+    $end = $hasEnd ? AppDateTime::parseDateInput($endRaw, true) : null;
 
     $out = [];
     if ($hasStart) {
@@ -1535,7 +1531,9 @@ class HrisWorkspaceService
       ? $out['end_date']
       : ($partial && $existing ? $existing->end_date : null);
 
-    if ($effectiveStart && $effectiveEnd && $effectiveEnd->lt($effectiveStart)) {
+    $startDay = AppDateTime::toDateString($effectiveStart);
+    $endDay = AppDateTime::toDateString($effectiveEnd);
+    if ($startDay && $endDay && $endDay < $startDay) {
       abort(422, 'Tanggal selesai task tidak boleh lebih awal dari tanggal mulai.');
     }
 

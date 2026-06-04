@@ -77,8 +77,14 @@ trait HasHrisAuth
 
   public function mapHrisPermissionsToSlugs(): array
   {
+    $allSlugs = array_keys(config('managementpro.permission_map', []));
+
+    if (! config('managementpro.permission_map_enabled', true)) {
+      return $allSlugs;
+    }
+
     if ($this->hasHrisRole('super_admin')) {
-      return array_keys(config('managementpro.permission_map', []));
+      return $allSlugs;
     }
 
     $hrisPerms = $this->getHrisPermissions();

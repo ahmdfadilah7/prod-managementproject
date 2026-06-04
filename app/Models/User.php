@@ -206,6 +206,10 @@ class User extends Authenticatable
     public function hasPermission(string $permission): bool
     {
         if (static::usesHrisSchema()) {
+            if (! config('managementpro.permission_map_enabled', true)) {
+                return true;
+            }
+
             if ($this->hasHrisRole('super_admin')) {
                 return true;
             }
