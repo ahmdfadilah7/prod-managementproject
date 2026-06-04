@@ -17,6 +17,15 @@ return [
   'default_company_id' => (int) env('HRIS_DEFAULT_COMPANY_ID', 1),
 
   /*
+  | API: kirim pesan exception ke client JSON (selain log). Production: false.
+  | Log selalu ditulis ke storage/logs dengan error_id.
+  */
+  'api_expose_exception_message' => filter_var(
+    env('HRIS_API_EXPOSE_EXCEPTION_MESSAGE', env('APP_DEBUG', false)),
+    FILTER_VALIDATE_BOOL
+  ),
+
+  /*
   | Lampiran task project (hd_project_task_attachments) — SELALU disk public ManagementPro
   | (storage/app/public/hd-project-tasks/{task_id}/), tidak memakai HRIS_STORAGE_*.
   |

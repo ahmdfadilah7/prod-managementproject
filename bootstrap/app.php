@@ -1,8 +1,15 @@
 <?php
 
+use Illuminate\Auth\AuthenticationException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
+use Throwable;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -26,5 +33,50 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        //
+        $exceptions->render(function (Throwable $e, Request $request) {
+            if (! $request->is('api/*') && ! $request->expectsJson()) {
+                return null;
+            }
+
+            if ($e instanceof ValidationException || $e instanceof AuthenticationException) {
+                return null;
+            }
+
+            if ($e instanceof HttpExceptionInterface && $e->getStatusCode() < 500) {
+                return null;
+            }
+
+            $errorId = (string) Str::uuid();
+
+            Log::error('ManagementPro API error', [
+                'error_id' => $errorId,
+                'exception' => $e::class,
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'url' => $request->fullUrl(),
+                'method' => $request->method(),
+                'user_id' => $request->user()?->id,
+                'input' => $request->except(['password', 'password_confirmation', 'token']),
+            ]);
+
+            $status = $e instanceof HttpExceptionInterface
+                ? $e->getStatusCode()
+                : 500;
+
+            if ($status < 400 || $status >= 600) {
+                $status = 500;
+            }
+
+            $expose = (bool) config('managementpro.api_expose_exception_message', false);
+
+            $message = $expose
+                ? $e->getMessage()
+                : 'Terjadi kesalahan server. Beri ID ini ke admin: '.$errorId;
+
+            return response()->json([
+                'message' => $message,
+                'error_id' => $errorId,
+            ], $status);
+        });
     })->create();

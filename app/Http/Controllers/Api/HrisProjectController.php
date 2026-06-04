@@ -9,6 +9,8 @@ use App\Models\HdSubCategory;
 use App\Services\HrisWorkspaceService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
+use Throwable;
 
 class HrisProjectController extends Controller
 {
@@ -119,7 +121,18 @@ class HrisProjectController extends Controller
             $validated['assignee_ids'] = [$user->id];
         }
 
-        $created = $this->hris->createHdProjectForUser($user, $validated);
+        try {
+            $created = $this->hris->createHdProjectForUser($user, $validated);
+        } catch (Throwable $e) {
+            Log::error('hris-projects.store failed', [
+                'user_id' => $user->id,
+                'hd_sub_categories_id' => $validated['hd_sub_categories_id'] ?? null,
+                'assignee_ids' => $validated['assignee_ids'] ?? [],
+                'exception' => $e::class,
+                'message' => $e->getMessage(),
+            ]);
+            throw $e;
+        }
 
         return response()->json([
             'data' => $this->hris->hdProjectToArray($created, 0, $user),
